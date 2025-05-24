@@ -1,14 +1,8 @@
-yahooquery
+tensorflow==2.12.0
 streamlit
 pandas
 numpy
 matplotlib
 scikit-learn
 yfinance
-tensorflow
-joblib
-
-
-
-
-
+yahooquery
