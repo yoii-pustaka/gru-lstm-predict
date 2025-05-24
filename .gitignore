@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+
+# VSCode or IDE settings
+.vscode/
+.idea/
+
+# Log and temporary files
+*.log
+*.tmp
+
+# Streamlit settings (opsional)
+.streamlit/secrets.toml
