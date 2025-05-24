@@ -5,7 +5,7 @@ numpy
 matplotlib
 scikit-learn
 yfinance
-tensorflow=
+tensorflow
 joblib
 
 
