@@ -1,57 +1,61 @@
-import os
 import streamlit as st
+import os
+import numpy as np
 from scripts.data_loader import get_historical_data
 from scripts.feature_engineering import create_features
 from scripts.model_predict import predict_next_days
 from scripts.plot import plot_prediction_vs_actual
-from scripts.utils import evaluate_predictions
+from scripts.utils import load_model_file, load_scaler_file, evaluate_predictions
+from scripts.model_train import train_test_split_close_only
 
-st.title("🔮 Prediksi Harga Saham")
+
+st.title("🔮 Prediksi & Evaluasi Harga Saham (Close Only)")
 
 available_tickers = ["BBCA.JK", "ANTM.JK", "TLKM.JK", "UNVR.JK"]
-ticker = st.selectbox("Pilih Ticker Saham", options=available_tickers)
-model_type = st.selectbox("Pilih Model", options=["LSTM", "GRU"])
-days_ahead = st.number_input("Prediksi Berapa Hari ke Depan?", min_value=1, max_value=30, value=1)
+ticker = st.selectbox("📌 Pilih Ticker Saham", options=available_tickers)
+model_type = st.selectbox("📂 Pilih Model", options=["LSTM", "GRU"])
 seq_length = 60
 
-if ticker:
-    df = get_historical_data(ticker)
-    if df is not None and not df.empty:
-        st.subheader("📈 Data Historis Saham")
-        st.dataframe(df.tail())
+df = get_historical_data(ticker)
 
-        df_feat = create_features(df)
+if df is not None and not df.empty:
+    df_feat = create_features(df)
+    st.subheader("📊 Data Historis")
+    st.dataframe(df_feat.tail())
 
-        # ⛏️ Cek apakah model sudah tersedia
-        model_path = f"models/{ticker}_{model_type}_model.h5"
-        scaler_path = f"models/{ticker}_{model_type}_scaler.pkl"
+    model_path = f"models/{ticker}_{model_type}_model.h5"
+    scaler_path = f"models/{ticker}_{model_type}_scaler.pkl"
 
-        if not os.path.exists(model_path) or not os.path.exists(scaler_path):
-            st.warning(f"Model '{model_type}' untuk {ticker} belum tersedia. Silakan latih terlebih dahulu di halaman 'Training'.")
-        else:
-            # 🔮 Prediksi hanya dilakukan jika model tersedia dan tombol ditekan
-            if st.button("Prediksi"):
-                try:
-                    preds = predict_next_days(df_feat, ticker, model_type=model_type, days_ahead=days_ahead, seq_length=seq_length)
-                    st.subheader(f"📊 Prediksi Harga Penutupan {days_ahead} Hari ke Depan")
-                    for i, p in enumerate(preds, 1):
-                        st.write(f"Hari {i}: {p:.2f}")
-
-                    actual = df['Close'][-days_ahead:].values
-                    if len(actual) < days_ahead:
-                        st.warning("Data aktual kurang dari jumlah hari prediksi, evaluasi mungkin tidak akurat.")
-
-                    if len(actual) > 0:
-                        mae, rmse, mape = evaluate_predictions(actual, preds)
-                        st.subheader("📉 Evaluasi Prediksi")
-                        st.write(f"MAE: {mae:.2f}")
-                        st.write(f"RMSE: {rmse:.2f}")
-                        st.write(f"MAPE: {mape:.2f}%")
-
-                        fig = plot_prediction_vs_actual(actual, preds, ticker)
-                        st.pyplot(fig)
-
-                except Exception as e:
-                    st.error(f"Prediksi gagal: {e}")
+    if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+        st.warning(f"Model '{model_type}' untuk {ticker} belum tersedia. Silakan latih dahulu.")
     else:
-        st.error("Gagal memuat data saham.")
+        st.header("✅ Evaluasi Model (80% Train / 20% Test Split)")
+
+        x_train, y_train, x_test, y_test, scaler = train_test_split_close_only(df_feat, ['Close'], seq_length)
+
+        model = load_model_file(ticker, model_type)
+
+        y_pred_scaled = model.predict(x_test, verbose=0).reshape(-1, 1)
+
+        y_test_inv = scaler.inverse_transform(y_test.reshape(-1, 1))[:, 0]
+        y_pred_inv = scaler.inverse_transform(y_pred_scaled)[:, 0]
+
+        mae, rmse, mape = evaluate_predictions(y_test_inv, y_pred_inv)
+
+        st.write(f"**MAE:** {mae:.2f}")
+        st.write(f"**RMSE:** {rmse:.2f}")
+        st.write(f"**MAPE:** {mape:.2f}%")
+
+        fig = plot_prediction_vs_actual(y_test_inv, y_pred_inv, ticker)
+        st.pyplot(fig)
+
+
+        st.header("🔮 Prediksi Masa Depan (Forward)")
+        days_option = st.selectbox("Pilih Horizon Prediksi", options=[1, 7, 15, 30], index=0)
+
+        if st.button("Prediksi ke Depan"):
+            preds = predict_next_days(df_feat, ticker, model_type, days_ahead=days_option, seq_length=seq_length)
+
+            st.subheader(f"📈 Prediksi Harga Close {days_option} Hari ke Depan")
+            for i, p in enumerate(preds, 1):
+                st.write(f"Hari {i}: {p:.2f}")
